@@ -5,13 +5,13 @@ import * as FileSystem from 'expo-file-system';
 import {
   Alert,
   Pressable,
+  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   View
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   createLiveScannerState,
   decodeCameraSnapshot,
@@ -129,10 +129,9 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" />
-        <View style={styles.app}>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.app}>
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Color Wheel Reader</Text>
@@ -212,9 +211,8 @@ export default function App() {
             ))}
           </View>
         </ScrollView>
-        </View>
-      </SafeAreaView>
-    </SafeAreaProvider>
+      </View>
+    </SafeAreaView>
   );
 }
 
