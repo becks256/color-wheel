@@ -5,13 +5,13 @@ import * as FileSystem from 'expo-file-system';
 import {
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   View
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   createLiveScannerState,
   decodeCameraSnapshot,
@@ -129,9 +129,10 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.app}>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.app}>
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Color Wheel Reader</Text>
@@ -163,7 +164,8 @@ export default function App() {
 
         <View style={styles.cameraCard}>
           {canUseCamera ? (
-            <CameraView ref={cameraRef} style={styles.camera} facing="back">
+            <>
+              <CameraView ref={cameraRef} style={styles.camera} facing="back" />
               <View style={styles.reticle}>
                 <View style={styles.reticleRing} />
                 <View style={styles.reticleDot} />
@@ -178,7 +180,7 @@ export default function App() {
                   </Text>
                 </Pressable>
               </View>
-            </CameraView>
+            </>
           ) : (
             <View style={styles.permissionPanel}>
               <Text style={styles.permissionTitle}>Camera permission is off</Text>
@@ -210,8 +212,9 @@ export default function App() {
             ))}
           </View>
         </ScrollView>
-      </View>
-    </SafeAreaView>
+        </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
