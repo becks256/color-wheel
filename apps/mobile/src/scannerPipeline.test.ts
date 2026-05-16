@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { encodeColorCode, renderColorCodeSvg } from '@color-wheel/codec';
-import { decodeImportedSvg, decodeImportedSvgDocument, describeCameraPipeline } from './scannerPipeline';
+import {
+  createLiveScannerState,
+  decodeCameraSnapshot,
+  decodeImportedSvg,
+  decodeImportedSvgDocument,
+  describeCameraPipeline,
+  nextLiveScannerState
+} from './scannerPipeline';
 
 describe('mobile scanner pipeline', () => {
   test('decodes imported generated SVGs through the shared codec', async () => {
@@ -25,5 +32,27 @@ describe('mobile scanner pipeline', () => {
 
     expect(result.decoded?.payloadText).toBe('document import smoke');
     expect(result.diagnostics.every((diagnostic) => diagnostic.status !== 'failed')).toBe(true);
+  });
+
+  test('tracks live scanner start, frame attempts, and stop state', () => {
+    const initial = createLiveScannerState();
+    const scanning = nextLiveScannerState(initial, { type: 'start' });
+    const afterFrame = nextLiveScannerState(scanning, { type: 'frame-attempt' });
+    const stopped = nextLiveScannerState(afterFrame, { type: 'stop' });
+
+    expect(scanning.isScanning).toBe(true);
+    expect(afterFrame.frameAttempts).toBe(1);
+    expect(stopped.isScanning).toBe(false);
+  });
+
+  test('reports camera snapshots as captured before pixel decoding is available', async () => {
+    const result = await decodeCameraSnapshot({ uri: 'file://snapshot.jpg', width: 1280, height: 720 });
+
+    expect(result.diagnostics[0]).toEqual({
+      stage: 'finder',
+      status: 'ok',
+      message: 'Captured camera snapshot 1280x720.'
+    });
+    expect(result.diagnostics.at(-1)?.status).toBe('pending');
   });
 });

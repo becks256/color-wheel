@@ -13,6 +13,24 @@ export interface ScanResult {
 
 export type ReadTextFile = (uri: string) => Promise<string>;
 
+export interface CameraSnapshot {
+  uri: string;
+  width: number;
+  height: number;
+}
+
+export interface LiveScannerState {
+  isScanning: boolean;
+  frameAttempts: number;
+  lastFrameAt?: number;
+}
+
+export type LiveScannerAction =
+  | { type: 'start' }
+  | { type: 'stop' }
+  | { type: 'frame-attempt'; capturedAt?: number }
+  | { type: 'reset' };
+
 export async function decodeImportedSvg(svg: string): Promise<ScanResult> {
   const diagnostics: ScanDiagnostic[] = [
     { stage: 'finder', status: 'ok', message: 'Read embedded keyhole-bullseye metadata from SVG.' },
@@ -46,6 +64,40 @@ export async function decodeImportedSvgDocument(uri: string, readTextFile: ReadT
         { stage: 'decode', status: 'pending', message: 'Decode did not run.' }
       ]
     };
+  }
+}
+
+export async function decodeCameraSnapshot(snapshot: CameraSnapshot): Promise<ScanResult> {
+  return {
+    diagnostics: [
+      { stage: 'finder', status: 'ok', message: `Captured camera snapshot ${snapshot.width}x${snapshot.height}.` },
+      { stage: 'sampling', status: 'pending', message: `Snapshot stored at ${snapshot.uri}. Pixel sampler is the next scanner component.` },
+      { stage: 'decode', status: 'pending', message: 'Waiting for raster finder detection and ring-cell color classification.' }
+    ]
+  };
+}
+
+export function createLiveScannerState(): LiveScannerState {
+  return {
+    isScanning: false,
+    frameAttempts: 0
+  };
+}
+
+export function nextLiveScannerState(state: LiveScannerState, action: LiveScannerAction): LiveScannerState {
+  switch (action.type) {
+    case 'start':
+      return { ...state, isScanning: true };
+    case 'stop':
+      return { ...state, isScanning: false };
+    case 'frame-attempt':
+      return {
+        ...state,
+        frameAttempts: state.frameAttempts + 1,
+        lastFrameAt: action.capturedAt ?? Date.now()
+      };
+    case 'reset':
+      return createLiveScannerState();
   }
 }
 

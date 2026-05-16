@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -13,19 +13,25 @@ import {
   View
 } from 'react-native';
 import {
+  createLiveScannerState,
+  decodeCameraSnapshot,
   decodeImportedSvgDocument,
   describeCameraPipeline,
+  nextLiveScannerState,
   type ScanDiagnostic
 } from './scannerPipeline';
 
 type ReaderMode = 'camera' | 'import';
 
 export default function App() {
+  const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [mode, setMode] = useState<ReaderMode>('camera');
   const [diagnostics, setDiagnostics] = useState<ScanDiagnostic[]>(describeCameraPipeline());
   const [payload, setPayload] = useState('Point the camera at a Color Wheel code or import an exported SVG.');
   const [isImporting, setIsImporting] = useState(false);
+  const [isCapturingFrame, setIsCapturingFrame] = useState(false);
+  const [scannerState, dispatchScanner] = useReducer(nextLiveScannerState, undefined, createLiveScannerState);
 
   const canUseCamera = permission?.granted === true;
   const statusLabel = useMemo(() => {
@@ -35,6 +41,16 @@ export default function App() {
     if (decoded) return 'Decoded';
     return 'Ready';
   }, [diagnostics]);
+
+  useEffect(() => {
+    if (!scannerState.isScanning || !canUseCamera || isCapturingFrame) return undefined;
+
+    const timer = setInterval(() => {
+      void scanCameraFrame();
+    }, 1800);
+
+    return () => clearInterval(timer);
+  }, [scannerState.isScanning, canUseCamera, isCapturingFrame]);
 
   async function handleImportSvg() {
     setMode('import');
@@ -74,6 +90,44 @@ export default function App() {
     }
   }
 
+  async function scanCameraFrame() {
+    if (!cameraRef.current || isCapturingFrame) return;
+
+    setMode('camera');
+    setIsCapturingFrame(true);
+    dispatchScanner({ type: 'frame-attempt' });
+    try {
+      const picture = await cameraRef.current.takePictureAsync({
+        quality: 0.55,
+        base64: false,
+        skipProcessing: true
+      });
+      const result = await decodeCameraSnapshot({
+        uri: picture.uri,
+        width: picture.width,
+        height: picture.height
+      });
+      setDiagnostics(result.diagnostics);
+      setPayload(result.decoded?.payloadText ?? `Live scanner captured frame ${scannerState.frameAttempts + 1}. Pixel decoding is next.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not capture camera frame.';
+      setDiagnostics([
+        { stage: 'finder', status: 'failed', message },
+        { stage: 'sampling', status: 'pending', message: 'No camera snapshot was sampled.' },
+        { stage: 'decode', status: 'pending', message: 'Decode did not run.' }
+      ]);
+      setPayload('Camera frame capture failed. Review diagnostics below.');
+      dispatchScanner({ type: 'stop' });
+    } finally {
+      setIsCapturingFrame(false);
+    }
+  }
+
+  function toggleLiveScanner() {
+    setMode('camera');
+    dispatchScanner({ type: scannerState.isScanning ? 'stop' : 'start' });
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
@@ -109,10 +163,20 @@ export default function App() {
 
         <View style={styles.cameraCard}>
           {canUseCamera ? (
-            <CameraView style={styles.camera} facing="back">
+            <CameraView ref={cameraRef} style={styles.camera} facing="back">
               <View style={styles.reticle}>
                 <View style={styles.reticleRing} />
                 <View style={styles.reticleDot} />
+              </View>
+              <View style={styles.cameraControls}>
+                <Pressable style={styles.cameraButton} onPress={toggleLiveScanner}>
+                  <Text style={styles.cameraButtonText}>{scannerState.isScanning ? 'Stop Live Scan' : 'Start Live Scan'}</Text>
+                </Pressable>
+                <Pressable style={[styles.cameraButton, styles.secondaryCameraButton]} onPress={() => void scanCameraFrame()}>
+                  <Text style={[styles.cameraButtonText, styles.secondaryCameraButtonText]}>
+                    {isCapturingFrame ? 'Scanning' : 'Scan Frame'}
+                  </Text>
+                </Pressable>
               </View>
             </CameraView>
           ) : (
@@ -130,6 +194,7 @@ export default function App() {
           <View style={styles.payloadCard}>
             <Text style={styles.sectionLabel}>Decoded payload</Text>
             <Text style={styles.payloadText}>{payload}</Text>
+            <Text style={styles.frameCounter}>Frame attempts: {scannerState.frameAttempts}</Text>
           </View>
 
           <View style={styles.diagnosticCard}>
@@ -250,6 +315,34 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.9)'
   },
+  cameraControls: {
+    position: 'absolute',
+    right: 14,
+    bottom: 14,
+    left: 14,
+    flexDirection: 'row',
+    gap: 10
+  },
+  cameraButton: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#ffffff'
+  },
+  secondaryCameraButton: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.62)'
+  },
+  cameraButtonText: {
+    color: '#172033',
+    fontWeight: '900'
+  },
+  secondaryCameraButtonText: {
+    color: '#ffffff'
+  },
   permissionPanel: {
     flex: 1,
     alignItems: 'center',
@@ -315,6 +408,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 23,
     fontWeight: '700'
+  },
+  frameCounter: {
+    color: '#65738a',
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 10
   },
   diagnosticRow: {
     flexDirection: 'row',
