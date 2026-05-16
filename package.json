@@ -1,0 +1,33 @@
+{
+  "name": "color-wheel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev -w apps/web",
+    "dev:service": "npm run dev -w apps/service",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "fastify": "^5.6.2",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.8.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3"
+  }
+}

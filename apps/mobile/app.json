@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Color Wheel Reader",
+    "slug": "color-wheel-reader",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "colorwheel",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Color Wheel Reader uses the camera to scan circular color codes."
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA"]
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-document-picker"
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@color-wheel/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Expo React Native reader for circular Color Wheel codes.",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@color-wheel/codec": "0.1.0",
+    "expo": "^55.0.24",
+    "expo-camera": "^55.0.18",
+    "expo-document-picker": "^55.0.13",
+    "expo-file-system": "^55.0.20",
+    "react-native": "^0.83.6",
+    "react-native-safe-area-context": "~5.6.2"
+  }
+}

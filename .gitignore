@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.superpowers/
+.worktrees/
+apps/mobile/.expo/
+.DS_Store
+*.log

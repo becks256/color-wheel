@@ -1,0 +1,13 @@
+{
+  "name": "@color-wheel/web",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -p tsconfig.json && vite build"
+  },
+  "dependencies": {
+    "@color-wheel/codec": "0.1.0"
+  },
+  "devDependencies": {}
+}
