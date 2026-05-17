@@ -250,9 +250,10 @@ export function getRingLayout(options: RingLayoutOptions): RingDefinition[] {
 }
 
 export function planRingsFromFinder(options: FinderRingPlanOptions): RingDefinition[] {
-  const ringWidth = options.ringWidth ?? Math.max(5, options.finderRadius * 0.18);
-  const quietGap = options.quietGap ?? ringWidth * 0.32;
-  const centerQuietZone = options.centerQuietZone ?? Math.max(12, options.finderRadius * 0.5);
+  const ringWidth = options.ringWidth ?? Math.max(5, options.finderRadius / (5.4 * 1.02));
+  const quietGap = options.quietGap ?? ringWidth * 0.26;
+  const centerQuietZone = options.centerQuietZone
+    ?? (options.finderRadius * (1.26 / 1.02 - 1) + Math.max(12, ringWidth * 2.4));
   return getRingLayout({
     ringCount: options.ringCount,
     innerRadius: options.finderRadius + centerQuietZone,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { encodeColorCode, planRingsFromFinder, renderColorCodeSvg } from '@color-wheel/codec';
+import { encodeColorCode, planColorCodeRender, planRingsFromFinder, renderColorCodeSvg } from '@color-wheel/codec';
 import {
   createLiveScannerState,
   decodeCameraSnapshot,
@@ -113,6 +113,28 @@ describe('mobile scanner pipeline', () => {
 
     expect(result.decoded?.payloadText).toBe('header decode');
     expect(result.diagnostics.at(-1)?.stage).toBe('decode');
+    expect(result.diagnostics.at(-1)?.status).toBe('ok');
+  });
+
+  test('decodes camera samples drawn with the generated auto scan-safe render layout', async () => {
+    const encoded = encodeColorCode({ payload: 'rendered layout decode', payloadType: 'text', eccLevel: 'low', compression: 'none' });
+    const renderPlan = planColorCodeRender(encoded, { sizingMode: 'auto-scan-safe', minCellSize: 7 });
+    const width = renderPlan.size;
+    const height = renderPlan.size;
+    const cx = width / 2;
+    const cy = height / 2;
+    const finderRadius = renderPlan.finderScale * 1.02;
+    const pixels = makeSyntheticFinderPixels(width, height, cx, cy, finderRadius);
+    drawDefinedRingSymbols(pixels, width, height, cx, cy, renderPlan.rings, encoded.symbols);
+
+    const result = await decodeCameraSnapshot({
+      uri: 'file://rendered-layout.jpg',
+      width,
+      height,
+      pixels
+    });
+
+    expect(result.decoded?.payloadText).toBe('rendered layout decode');
     expect(result.diagnostics.at(-1)?.status).toBe('ok');
   });
 });
