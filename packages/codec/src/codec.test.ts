@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import {
   decodeColorCode,
+  decodeColorCodeSymbols,
   encodeColorCode,
   renderColorCodeSvg,
   extractColorCodeFromSvg,
   getRingLayout,
-  planColorCodeRender
+  planColorCodeRender,
+  planRingsFromFinder
 } from './index';
 
 describe('color wheel codec', () => {
@@ -24,6 +26,21 @@ describe('color wheel codec', () => {
     expect(decoded.eccLevel).toBe('medium');
     expect(encoded.metadata.symbolCount).toBeGreaterThan(0);
     expect(encoded.metadata.compressionRatio).toBeGreaterThan(0);
+  });
+
+  test('decodes sampled symbols without external metadata', () => {
+    const encoded = encodeColorCode({
+      payload: 'camera payload',
+      payloadType: 'text',
+      eccLevel: 'low',
+      compression: 'none'
+    });
+
+    const decoded = decodeColorCodeSymbols([...encoded.symbols, 0, 0, 0]);
+
+    expect(decoded.payloadText).toBe('camera payload');
+    expect(decoded.payloadType).toBe('text');
+    expect(decoded.checksumValid).toBe(true);
   });
 
   test('uses proportional ring capacity so outer rings hold more cells', () => {
@@ -92,5 +109,14 @@ describe('color wheel codec', () => {
     expect(longPlan.size).toBeGreaterThan(shortPlan.size);
     expect(svg).toContain(`data-sizing-mode="auto-compact"`);
     expect(svg).toContain(`data-ring-count="${longPlan.ringCount}"`);
+  });
+
+  test('derives scanner ring layout from observed finder radius', () => {
+    const rings = planRingsFromFinder({ finderRadius: 32, ringCount: 4 });
+
+    expect(rings).toHaveLength(4);
+    expect(rings[0].innerRadius).toBeGreaterThan(32);
+    expect(rings[1].cellCount).toBeGreaterThanOrEqual(rings[0].cellCount);
+    expect(rings[3].startIndex).toBe(rings.slice(0, 3).reduce((sum, ring) => sum + ring.cellCount, 0));
   });
 });

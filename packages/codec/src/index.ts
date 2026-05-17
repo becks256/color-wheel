@@ -78,6 +78,14 @@ export interface RenderPlan {
   rings: RingDefinition[];
 }
 
+export interface FinderRingPlanOptions {
+  finderRadius: number;
+  ringCount: number;
+  ringWidth?: number;
+  quietGap?: number;
+  centerQuietZone?: number;
+}
+
 const SYMBOL_COLORS = ['#ffffff', '#020617', '#ef4444', '#22c55e', '#2563eb'] as const;
 const TYPE_CODES: Record<PayloadType, number> = { text: 1, url: 2, json: 3, binary: 4 };
 const CODE_TYPES: Record<number, PayloadType> = { 1: 'text', 2: 'url', 3: 'json', 4: 'binary' };
@@ -127,24 +135,28 @@ export function encodeColorCode(request: EncodeRequest): EncodedColorCode {
 export function decodeColorCode(symbols: ColorSymbol[], metadata: CodeMetadata): DecodeResult {
   const dataSymbols = symbols.slice(0, metadata.dataSymbolCount);
   const frame = base5ToBytes(dataSymbols, metadata.frameLength);
-  const parsed = parseFrame(frame);
-  const payloadBytes = parsed.compression === 'rle'
-    ? decompressRle(parsed.data, parsed.originalLength)
-    : parsed.data;
-  const checksumValid = crc32(payloadBytes) === parsed.checksum;
+  return decodeFrame(frame);
+}
 
-  if (!checksumValid) {
-    throw new Error('Checksum mismatch: sampled symbols do not decode to a valid payload');
+export function decodeColorCodeSymbols(symbols: ColorSymbol[]): DecodeResult {
+  const maxFrameLength = Math.floor((symbols.length * Math.log2(5)) / 8);
+  let lastError: unknown;
+
+  for (let frameLength = 19; frameLength <= maxFrameLength; frameLength += 1) {
+    const dataSymbolCount = symbolsForByteLength(frameLength);
+    if (dataSymbolCount > symbols.length) break;
+
+    try {
+      const frame = base5ToBytes(symbols.slice(0, dataSymbolCount), frameLength);
+      const parsed = parseFrame(frame);
+      if (19 + parsed.data.length !== frameLength) continue;
+      return decodeParsedFrame(parsed);
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  return {
-    payloadBytes,
-    payloadText: parsed.payloadType === 'binary' ? bytesToBase64(payloadBytes) : textDecoder.decode(payloadBytes),
-    payloadType: parsed.payloadType,
-    eccLevel: parsed.eccLevel,
-    compression: parsed.compression,
-    checksumValid
-  };
+  throw lastError instanceof Error ? lastError : new Error('No valid color wheel frame found in sampled symbols.');
 }
 
 export function getRingLayout(options: RingLayoutOptions): RingDefinition[] {
@@ -159,6 +171,18 @@ export function getRingLayout(options: RingLayoutOptions): RingDefinition[] {
     startIndex += cellCount;
   }
   return rings;
+}
+
+export function planRingsFromFinder(options: FinderRingPlanOptions): RingDefinition[] {
+  const ringWidth = options.ringWidth ?? Math.max(5, options.finderRadius * 0.18);
+  const quietGap = options.quietGap ?? ringWidth * 0.32;
+  const centerQuietZone = options.centerQuietZone ?? Math.max(12, options.finderRadius * 0.5);
+  return getRingLayout({
+    ringCount: options.ringCount,
+    innerRadius: options.finderRadius + centerQuietZone,
+    ringWidth,
+    quietGap
+  });
 }
 
 export function renderColorCodeSvg(
@@ -302,6 +326,30 @@ function parseFrame(frame: Uint8Array) {
   };
 }
 
+function decodeFrame(frame: Uint8Array): DecodeResult {
+  return decodeParsedFrame(parseFrame(frame));
+}
+
+function decodeParsedFrame(parsed: ReturnType<typeof parseFrame>): DecodeResult {
+  const payloadBytes = parsed.compression === 'rle'
+    ? decompressRle(parsed.data, parsed.originalLength)
+    : parsed.data;
+  const checksumValid = crc32(payloadBytes) === parsed.checksum;
+
+  if (!checksumValid) {
+    throw new Error('Checksum mismatch: sampled symbols do not decode to a valid payload');
+  }
+
+  return {
+    payloadBytes,
+    payloadText: parsed.payloadType === 'binary' ? bytesToBase64(payloadBytes) : textDecoder.decode(payloadBytes),
+    payloadType: parsed.payloadType,
+    eccLevel: parsed.eccLevel,
+    compression: parsed.compression,
+    checksumValid
+  };
+}
+
 function compressPayload(bytes: Uint8Array, mode: CompressionMode): { mode: 'none' | 'rle'; bytes: Uint8Array } {
   if (mode === 'none') return { mode: 'none', bytes };
   const rle = compressRle(bytes);
@@ -344,9 +392,13 @@ function bytesToBase5(bytes: Uint8Array): ColorSymbol[] {
     digits.push(Number(value % 5n) as ColorSymbol);
     value /= 5n;
   }
-  const minimumDigits = Math.ceil((bytes.length * 8) / Math.log2(5));
+  const minimumDigits = symbolsForByteLength(bytes.length);
   while (digits.length < minimumDigits) digits.push(0);
   return digits.reverse();
+}
+
+function symbolsForByteLength(byteLength: number): number {
+  return Math.ceil((byteLength * 8) / Math.log2(5));
 }
 
 function base5ToBytes(symbols: ColorSymbol[], byteLength: number): Uint8Array {

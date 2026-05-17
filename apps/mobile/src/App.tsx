@@ -20,6 +20,7 @@ import {
   nextLiveScannerState,
   type ScanDiagnostic
 } from './scannerPipeline';
+import { decodeJpegBase64 } from './jpegDecode';
 
 type ReaderMode = 'camera' | 'import';
 
@@ -99,13 +100,15 @@ export default function App() {
     try {
       const picture = await cameraRef.current.takePictureAsync({
         quality: 0.55,
-        base64: false,
+        base64: true,
         skipProcessing: true
       });
+      const pixels = picture.base64 ? decodeJpegBase64(picture.base64).data : undefined;
       const result = await decodeCameraSnapshot({
         uri: picture.uri,
         width: picture.width,
-        height: picture.height
+        height: picture.height,
+        pixels
       });
       setDiagnostics(result.diagnostics);
       setPayload(result.decoded?.payloadText ?? `Live scanner captured frame ${scannerState.frameAttempts + 1}. Pixel decoding is next.`);

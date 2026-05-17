@@ -18,6 +18,7 @@
     "expo-camera": "~17.0.10",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.22",
+    "jpeg-js": "^0.4.4",
     "react-native": "^0.81.5",
     "react-native-safe-area-context": "~5.6.0"
   }
