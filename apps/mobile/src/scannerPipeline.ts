@@ -39,6 +39,7 @@ export interface CameraSnapshot {
   pixels?: Uint8ClampedArray;
   metadata?: CodeMetadata;
   ringCount?: number;
+  maxSamplingAttempts?: number;
 }
 
 export interface LiveScannerState {
@@ -138,7 +139,8 @@ export async function decodeCameraSnapshot(snapshot: CameraSnapshot): Promise<Sc
         finder.centerY ?? 0,
         finder.radius ?? 0,
         snapshot.ringCount ?? 8,
-        snapshot.metadata
+        snapshot.metadata,
+        snapshot.maxSamplingAttempts
       );
       decoded = decodedAttempt.decoded;
       bestAttempt = decodedAttempt.attempt;
@@ -161,7 +163,8 @@ export async function decodeCameraSnapshot(snapshot: CameraSnapshot): Promise<Sc
         finder.centerX ?? 0,
         finder.centerY ?? 0,
         finder.radius ?? 0,
-        snapshot.ringCount ?? 8
+        snapshot.ringCount ?? 8,
+        snapshot.maxSamplingAttempts
       );
       decoded = decodedAttempt.decoded;
       bestAttempt = decodedAttempt.attempt;
@@ -198,11 +201,12 @@ function decodeWithoutMetadataSearch(
   centerX: number,
   centerY: number,
   finderRadius: number,
-  ringCount: number
+  ringCount: number,
+  maxSamplingAttempts?: number
 ): { decoded: DecodeResult; attempt: SamplingAttempt } {
   let lastError: unknown;
 
-  for (const attempt of buildSamplingAttempts(image, centerX, centerY, finderRadius, ringCount)) {
+  for (const attempt of buildSamplingAttempts(image, centerX, centerY, finderRadius, ringCount, 0, maxSamplingAttempts)) {
     try {
       return {
         decoded: decodeColorCodeSymbols(attempt.sampled.symbols),
@@ -222,11 +226,12 @@ function decodeWithMetadataSearch(
   centerY: number,
   finderRadius: number,
   ringCount: number,
-  metadata: CodeMetadata
+  metadata: CodeMetadata,
+  maxSamplingAttempts?: number
 ): { decoded: DecodeResult; attempt: SamplingAttempt } {
   let lastError: unknown;
 
-  for (const attempt of buildSamplingAttempts(image, centerX, centerY, finderRadius, ringCount, metadata.symbolCount)) {
+  for (const attempt of buildSamplingAttempts(image, centerX, centerY, finderRadius, ringCount, metadata.symbolCount, maxSamplingAttempts)) {
     try {
       return {
         decoded: decodeColorCode(attempt.sampled.symbols, metadata),
@@ -256,7 +261,8 @@ function buildSamplingAttempts(
   centerY: number,
   finderRadius: number,
   ringCount: number,
-  requiredSymbols = 0
+  requiredSymbols = 0,
+  maxAttempts = Number.POSITIVE_INFINITY
 ): SamplingAttempt[] {
   const attempts: SamplingAttempt[] = [];
   const radiusCandidates = uniqueNumbers([
@@ -293,6 +299,7 @@ function buildSamplingAttempts(
             finderRadius: radius,
             angleOffset
           });
+          if (attempts.length >= maxAttempts) return attempts;
         }
       }
     }

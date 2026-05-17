@@ -32,6 +32,7 @@ export default function App() {
   const [payload, setPayload] = useState('Point the camera at a Color Wheel code or import an exported SVG.');
   const [isImporting, setIsImporting] = useState(false);
   const [isCapturingFrame, setIsCapturingFrame] = useState(false);
+  const [pictureSize, setPictureSize] = useState<string>();
   const [scannerState, dispatchScanner] = useReducer(nextLiveScannerState, undefined, createLiveScannerState);
 
   const canUseCamera = permission?.granted === true;
@@ -99,16 +100,20 @@ export default function App() {
     dispatchScanner({ type: 'frame-attempt' });
     try {
       const picture = await cameraRef.current.takePictureAsync({
-        quality: 0.55,
+        quality: 0.22,
         base64: true,
-        skipProcessing: true
+        skipProcessing: true,
+        shutterSound: false,
+        fastMode: true,
+        maxDownsampling: 2
       });
       const pixels = picture.base64 ? decodeJpegBase64(picture.base64).data : undefined;
       const result = await decodeCameraSnapshot({
         uri: picture.uri,
         width: picture.width,
         height: picture.height,
-        pixels
+        pixels,
+        maxSamplingAttempts: 12
       });
       setDiagnostics(result.diagnostics);
       setPayload(result.decoded?.payloadText ?? `Live scanner captured frame ${scannerState.frameAttempts + 1}. Pixel decoding is next.`);
@@ -129,6 +134,16 @@ export default function App() {
   function toggleLiveScanner() {
     setMode('camera');
     dispatchScanner({ type: scannerState.isScanning ? 'stop' : 'start' });
+  }
+
+  async function handleCameraReady() {
+    try {
+      const sizes = await cameraRef.current?.getAvailablePictureSizesAsync();
+      const smallestSize = chooseSmallestPictureSize(sizes ?? []);
+      if (smallestSize) setPictureSize(smallestSize);
+    } catch {
+      setPictureSize(undefined);
+    }
   }
 
   return (
@@ -167,10 +182,18 @@ export default function App() {
         <View style={styles.cameraCard}>
           {canUseCamera ? (
             <>
-              <CameraView ref={cameraRef} style={styles.camera} facing="back" />
-              <View style={styles.reticle}>
-                <View style={styles.reticleRing} />
-                <View style={styles.reticleDot} />
+              <CameraView
+                ref={cameraRef}
+                style={styles.camera}
+                facing="back"
+                pictureSize={pictureSize}
+                onCameraReady={() => void handleCameraReady()}
+              />
+              <View pointerEvents="none" style={styles.reticleOverlay}>
+                <View style={styles.reticle}>
+                  <View style={styles.reticleRing} />
+                  <View style={styles.reticleDot} />
+                </View>
               </View>
               <View style={styles.cameraControls}>
                 <Pressable style={styles.cameraButton} onPress={toggleLiveScanner}>
@@ -217,6 +240,16 @@ export default function App() {
       </View>
     </SafeAreaView>
   );
+}
+
+function chooseSmallestPictureSize(sizes: string[]): string | undefined {
+  return sizes
+    .map((size) => {
+      const [width, height] = size.split('x').map((part) => Number(part));
+      return { size, area: Number.isFinite(width) && Number.isFinite(height) ? width * height : Number.POSITIVE_INFINITY };
+    })
+    .filter((entry) => entry.area > 0 && Number.isFinite(entry.area))
+    .sort((a, b) => a.area - b.area)[0]?.size;
 }
 
 const styles = StyleSheet.create({
@@ -292,9 +325,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#111827'
   },
   camera: {
-    flex: 1,
+    flex: 1
+  },
+  reticleOverlay: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    backgroundColor: 'transparent'
   },
   reticle: {
     width: 190,
@@ -303,7 +340,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 95,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.75)'
+    borderColor: 'rgba(255,255,255,0.75)',
+    backgroundColor: 'transparent'
   },
   reticleRing: {
     width: 82,
