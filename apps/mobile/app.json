@@ -3,6 +3,7 @@
     "name": "Color Wheel Reader",
     "slug": "color-wheel-reader",
     "version": "0.1.0",
+    "entryPoint": "./src/index.ts",
     "orientation": "portrait",
     "scheme": "colorwheel",
     "userInterfaceStyle": "light",
