@@ -103,17 +103,14 @@ export default function App() {
         quality: 0.22,
         base64: true,
         skipProcessing: true,
-        shutterSound: false,
-        fastMode: true,
-        maxDownsampling: 2
+        shutterSound: false
       });
       const pixels = picture.base64 ? decodeJpegBase64(picture.base64).data : undefined;
       const result = await decodeCameraSnapshot({
         uri: picture.uri,
         width: picture.width,
         height: picture.height,
-        pixels,
-        maxSamplingAttempts: 12
+        pixels
       });
       setDiagnostics(result.diagnostics);
       setPayload(result.decoded?.payloadText ?? `Live scanner captured frame ${scannerState.frameAttempts + 1}. Pixel decoding is next.`);

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  decodeColorCodeHeader,
   decodeColorCode,
   decodeColorCodeSymbols,
   encodeColorCode,
@@ -41,6 +42,26 @@ describe('color wheel codec', () => {
     expect(decoded.payloadText).toBe('camera payload');
     expect(decoded.payloadType).toBe('text');
     expect(decoded.checksumValid).toBe(true);
+  });
+
+  test('prefixes scanner metadata header before payload symbols', () => {
+    const encoded = encodeColorCode({
+      payload: 'header metadata',
+      payloadType: 'text',
+      eccLevel: 'high',
+      compression: 'none'
+    });
+
+    const header = decodeColorCodeHeader(encoded.symbols);
+    const decoded = decodeColorCodeSymbols([...encoded.symbols, 0, 0, 0]);
+
+    expect(encoded.metadata.headerSymbolCount).toBeGreaterThan(0);
+    expect(header.frameLength).toBe(encoded.metadata.frameLength);
+    expect(header.dataSymbolCount).toBe(encoded.metadata.dataSymbolCount);
+    expect(header.paritySymbolCount).toBe(encoded.metadata.paritySymbolCount);
+    expect(header.payloadType).toBe('text');
+    expect(header.eccLevel).toBe('high');
+    expect(decoded.payloadText).toBe('header metadata');
   });
 
   test('uses proportional ring capacity so outer rings hold more cells', () => {

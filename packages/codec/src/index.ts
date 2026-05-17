@@ -14,6 +14,7 @@ export interface CodeMetadata {
   magic: 'CWC1';
   version: 1;
   finder: 'keyhole-bullseye';
+  headerSymbolCount: number;
   payloadType: PayloadType;
   eccLevel: EccLevel;
   compression: 'none' | 'rle';
@@ -24,6 +25,18 @@ export interface CodeMetadata {
   symbolCount: number;
   checksum: number;
   compressionRatio: number;
+}
+
+export interface CodeHeader {
+  magic: 'CWH1';
+  version: 1;
+  payloadType: PayloadType;
+  eccLevel: EccLevel;
+  compression: 'none' | 'rle';
+  frameLength: number;
+  dataSymbolCount: number;
+  paritySymbolCount: number;
+  headerSymbolCount: number;
 }
 
 export interface EncodedColorCode {
@@ -92,6 +105,8 @@ const CODE_TYPES: Record<number, PayloadType> = { 1: 'text', 2: 'url', 3: 'json'
 const ECC_CODES: Record<EccLevel, number> = { low: 1, medium: 2, high: 3 };
 const CODE_ECC: Record<number, EccLevel> = { 1: 'low', 2: 'medium', 3: 'high' };
 const ECC_RATIOS: Record<EccLevel, number> = { low: 0.08, medium: 0.16, high: 0.28 };
+const HEADER_BYTE_LENGTH = 18;
+const HEADER_SYMBOL_COUNT = Math.ceil((HEADER_BYTE_LENGTH * 8) / Math.log2(5));
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -111,13 +126,22 @@ export function encodeColorCode(request: EncodeRequest): EncodedColorCode {
   });
   const dataSymbols = bytesToBase5(frame);
   const paritySymbols = buildParitySymbols(dataSymbols, eccLevel);
+  const headerSymbols = bytesToBase5(buildHeader({
+    payloadType,
+    eccLevel,
+    compression: compressed.mode,
+    frameLength: frame.length,
+    dataSymbolCount: dataSymbols.length,
+    paritySymbolCount: paritySymbols.length
+  }));
 
   return {
-    symbols: [...dataSymbols, ...paritySymbols],
+    symbols: [...headerSymbols, ...dataSymbols, ...paritySymbols],
     metadata: {
       magic: 'CWC1',
       version: 1,
       finder: 'keyhole-bullseye',
+      headerSymbolCount: headerSymbols.length,
       payloadType,
       eccLevel,
       compression: compressed.mode,
@@ -125,7 +149,7 @@ export function encodeColorCode(request: EncodeRequest): EncodedColorCode {
       frameLength: frame.length,
       dataSymbolCount: dataSymbols.length,
       paritySymbolCount: paritySymbols.length,
-      symbolCount: dataSymbols.length + paritySymbols.length,
+      symbolCount: headerSymbols.length + dataSymbols.length + paritySymbols.length,
       checksum,
       compressionRatio: originalBytes.length === 0 ? 1 : compressed.bytes.length / originalBytes.length
     }
@@ -133,12 +157,64 @@ export function encodeColorCode(request: EncodeRequest): EncodedColorCode {
 }
 
 export function decodeColorCode(symbols: ColorSymbol[], metadata: CodeMetadata): DecodeResult {
-  const dataSymbols = symbols.slice(0, metadata.dataSymbolCount);
+  const start = metadata.headerSymbolCount ?? 0;
+  const dataSymbols = symbols.slice(start, start + metadata.dataSymbolCount);
   const frame = base5ToBytes(dataSymbols, metadata.frameLength);
   return decodeFrame(frame);
 }
 
 export function decodeColorCodeSymbols(symbols: ColorSymbol[]): DecodeResult {
+  try {
+    return decodeColorCodeSymbolsFromHeader(symbols);
+  } catch {
+    try {
+      return decodeLegacyColorCodeSymbols(symbols.slice(HEADER_SYMBOL_COUNT));
+    } catch {
+      return decodeLegacyColorCodeSymbols(symbols);
+    }
+  }
+}
+
+export function decodeColorCodeSymbolsFromHeader(symbols: ColorSymbol[]): DecodeResult {
+  const header = decodeColorCodeHeader(symbols);
+  const start = header.headerSymbolCount;
+  const frame = base5ToBytes(symbols.slice(start, start + header.dataSymbolCount), header.frameLength);
+  return decodeFrame(frame);
+}
+
+export function decodeColorCodeHeader(symbols: ColorSymbol[]): CodeHeader {
+  if (symbols.length < HEADER_SYMBOL_COUNT) {
+    throw new Error('Not enough symbols to read color wheel header.');
+  }
+
+  const bytes = base5ToBytes(symbols.slice(0, HEADER_SYMBOL_COUNT), HEADER_BYTE_LENGTH);
+  const checksum = bytes.slice(0, HEADER_BYTE_LENGTH - 1).reduce((sum, byte) => (sum + byte) & 0xff, 0);
+  const magic = textDecoder.decode(bytes.slice(0, 4));
+
+  if (magic !== 'CWH1' || bytes[4] !== 1 || bytes[17] !== checksum) {
+    throw new Error('Unsupported color wheel scanner header.');
+  }
+
+  const payloadType = CODE_TYPES[bytes[5]];
+  const eccLevel = CODE_ECC[bytes[6]];
+  if (!payloadType || !eccLevel) {
+    throw new Error('Unknown color wheel scanner header mode.');
+  }
+
+  return {
+    magic: 'CWH1',
+    version: 1,
+    payloadType,
+    eccLevel,
+    compression: bytes[7] === 1 ? 'rle' : 'none',
+    frameLength: readUint24(bytes, 8),
+    dataSymbolCount: readUint24(bytes, 11),
+    paritySymbolCount: readUint24(bytes, 14),
+    headerSymbolCount: HEADER_SYMBOL_COUNT
+  };
+}
+
+function decodeLegacyColorCodeSymbols(symbols: ColorSymbol[]): DecodeResult {
   const maxFrameLength = Math.floor((symbols.length * Math.log2(5)) / 8);
   let lastError: unknown;
 
@@ -300,6 +376,27 @@ function buildFrame(input: {
   writeUint24(frame, 16, input.data.length);
   frame.set(input.data, 19);
   return frame;
+}
+
+function buildHeader(input: {
+  payloadType: PayloadType;
+  eccLevel: EccLevel;
+  compression: 'none' | 'rle';
+  frameLength: number;
+  dataSymbolCount: number;
+  paritySymbolCount: number;
+}): Uint8Array {
+  const header = new Uint8Array(HEADER_BYTE_LENGTH);
+  header.set([67, 87, 72, 49], 0);
+  header[4] = 1;
+  header[5] = TYPE_CODES[input.payloadType];
+  header[6] = ECC_CODES[input.eccLevel];
+  header[7] = input.compression === 'rle' ? 1 : 0;
+  writeUint24(header, 8, input.frameLength);
+  writeUint24(header, 11, input.dataSymbolCount);
+  writeUint24(header, 14, input.paritySymbolCount);
+  header[17] = header.slice(0, HEADER_BYTE_LENGTH - 1).reduce((sum, byte) => (sum + byte) & 0xff, 0);
+  return header;
 }
 
 function parseFrame(frame: Uint8Array) {

@@ -1,6 +1,7 @@
 import {
   decodeColorCode,
   decodeColorCodeSymbols,
+  decodeColorCodeSymbolsFromHeader,
   extractColorCodeFromSvg,
   planRingsFromFinder,
   type CodeMetadata,
@@ -209,6 +210,17 @@ function decodeWithoutMetadataSearch(
   for (const attempt of buildSamplingAttempts(image, centerX, centerY, finderRadius, ringCount, 0, maxSamplingAttempts)) {
     try {
       return {
+        decoded: decodeColorCodeSymbolsFromHeader(attempt.sampled.symbols),
+        attempt
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  for (const attempt of buildSamplingAttempts(image, centerX, centerY, finderRadius, ringCount, 0, maxSamplingAttempts)) {
+    try {
+      return {
         decoded: decodeColorCodeSymbols(attempt.sampled.symbols),
         attempt
       };
@@ -265,6 +277,8 @@ function buildSamplingAttempts(
   maxAttempts = Number.POSITIVE_INFINITY
 ): SamplingAttempt[] {
   const attempts: SamplingAttempt[] = [];
+  const baseCenterX = Math.round(centerX);
+  const baseCenterY = Math.round(centerY);
   const radiusCandidates = uniqueNumbers([
     Math.round(finderRadius),
     Math.ceil(finderRadius),
@@ -286,16 +300,16 @@ function buildSamplingAttempts(
         for (const angleOffset of angleOffsets) {
           attempts.push({
             sampled: sampleRingSymbols(image, {
-              centerX: centerX + dx,
-              centerY: centerY + dy,
+              centerX: baseCenterX + dx,
+              centerY: baseCenterY + dy,
               finderRadius: radius,
               rings,
               sampleRadius: 1,
               angleOffset
             }),
             rings,
-            centerX: centerX + dx,
-            centerY: centerY + dy,
+            centerX: baseCenterX + dx,
+            centerY: baseCenterY + dy,
             finderRadius: radius,
             angleOffset
           });
