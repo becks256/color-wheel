@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import {
   Alert,
   Pressable,
@@ -23,6 +24,7 @@ import {
 import { decodeJpegBase64 } from './jpegDecode';
 
 type ReaderMode = 'camera' | 'import';
+const SCAN_IMAGE_WIDTH = 420;
 
 export default function App() {
   const cameraRef = useRef<CameraView>(null);
@@ -101,15 +103,19 @@ export default function App() {
     try {
       const picture = await cameraRef.current.takePictureAsync({
         quality: 0.22,
-        base64: true,
         skipProcessing: true,
         shutterSound: false
       });
-      const pixels = picture.base64 ? decodeJpegBase64(picture.base64).data : undefined;
+      const scanImage = await manipulateAsync(
+        picture.uri,
+        [{ resize: { width: SCAN_IMAGE_WIDTH } }],
+        { base64: true, compress: 0.45, format: SaveFormat.JPEG }
+      );
+      const pixels = scanImage.base64 ? decodeJpegBase64(scanImage.base64).data : undefined;
       const result = await decodeCameraSnapshot({
-        uri: picture.uri,
-        width: picture.width,
-        height: picture.height,
+        uri: scanImage.uri,
+        width: scanImage.width,
+        height: scanImage.height,
         pixels
       });
       setDiagnostics(result.diagnostics);
